@@ -1,0 +1,31 @@
+.hcontainer {
+    direction: rtl;
+
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.hcard-body {
+    text-align: center; /* تحديد محاذاة النص إلى اليمين */
+}
+
+.hcard {
+    width: 50%;
+    margin-top: 50px;
+}
+.hcardcreat {
+    width: 100%;
+    margin-top: 50px;
+}
+.helement{
+    text-align: right;
+    width: 50%;
+    padding-top: 20px;
+}
+.helementedit{
+    text-align: right;
+    width: 30%;
+
+    padding-top: 20px;
+}

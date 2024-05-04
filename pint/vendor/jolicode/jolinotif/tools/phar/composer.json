@@ -1,0 +1,23 @@
+{
+  "name": "jolicode/castor-phar",
+  "description": "Tooling for building Castor phar",
+  "type": "project",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Joel Wurtz",
+      "email": "jwurtz@jolicode.com"
+    }
+  ],
+  "require": {
+    "humbug/box": ">=4.5.1"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "preferred-install": "dist",
+    "sort-packages": true,
+    "platform": {
+      "php": "8.1"
+    }
+  }
+}

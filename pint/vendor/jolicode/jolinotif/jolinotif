@@ -1,0 +1,233 @@
+#!/usr/bin/env php
+<?php
+
+use Joli\JoliNotif\DefaultNotifier;
+use Joli\JoliNotif\Notification;
+
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    $loader = require(__DIR__ . '/vendor/autoload.php');
+} elseif (file_exists(__DIR__ . '/../../../vendor/autoload.php')) {
+    $loader = require(__DIR__ . '/../../../vendor/autoload.php');
+} else {
+    throw new \RuntimeException('Unable to load autoloader.');
+}
+
+final class Cli
+{
+    const DESCRIPTION = 'Send notifications to your desktop directly from your terminal.';
+
+    const RULES = [
+        'title'    => [
+            'name'     => 'title',
+            'info'     => 'Notification title.',
+            'required' => true,
+        ],
+        'body'     => [
+            'name'     => 'body',
+            'info'     => 'Notification body.',
+            'required' => true,
+        ],
+        'icon'     => [
+            'name'     => 'icon',
+            'info'     => 'Notification icon.',
+            'required' => false,
+        ],
+        'subtitle' => [
+            'name'     => 'subtitle',
+            'info'     => 'Notification subtitle. Only works on macOS (AppleScriptNotifier).',
+            'required' => false,
+        ],
+        'sound'    => [
+            'name'     => 'sound',
+            'info'     => 'Notification sound. Only works on macOS (AppleScriptNotifier).',
+            'required' => false,
+        ],
+        'url'      => [
+            'name'     => 'url',
+            'info'     => 'Notification url. Only works on macOS (TerminalNotifierNotifier).',
+            'required' => false,
+        ],
+        'help'     => [
+            'name' => 'help',
+            'info' => 'Show this help.',
+            'required' => false,
+            'flag' => true,
+        ],
+        'verbose'     => [
+            'name' => 'verbose',
+            'info' => 'Output debug information.',
+            'required' => false,
+            'flag' => true,
+        ],
+    ];
+
+    /** @var array<string, mixed> */
+    private array $arguments = [];
+
+    private readonly string $command;
+
+    public function __construct()
+    {
+        $this->command = $_SERVER['argv'][0];
+    }
+
+    public function parse(): void
+    {
+        $options = '';
+        $longOptions = array_map(function ($rule) {
+            $flag = $rule['required'] ? ':' : '::';
+
+            return $rule['name'] . $flag;
+        }, self::RULES);
+
+        $this->arguments = getopt($options, $longOptions) ?: [];
+    }
+
+    public function getOption(string $name): mixed
+    {
+        return $this->arguments[$name] ?: false;
+    }
+
+    public function getStringOption(string $name): string
+    {
+        $option = $this->getOption($name);
+
+        if (is_array($option)) {
+            throw new Exception("Option --{$name} can be specified only once.");
+        }
+
+        if (!is_string($option) && !is_numeric($option)) {
+            // Probably not possible to reach this point
+            throw new Exception("Invalid type given for option --{$name}.");
+        }
+
+        return (string) $option;
+    }
+
+    public function hasOption(string $name): bool
+    {
+        return isset($this->arguments[$name]);
+    }
+
+    public function validate(): bool
+    {
+        $valid = true;
+
+        foreach (self::RULES as $rule) {
+            if ($rule['required'] && !$this->hasOption($rule['name'])) {
+                $this->log("Please specify notification {$rule['name']} with the option --{$rule['name']}");
+                $valid = false;
+            }
+
+            if ($this->hasOption($rule['name']) && is_array($this->getOption($rule['name']))) {
+                $this->log("Option --{$rule['name']} can be specified only once.");
+                $valid = false;
+            }
+        }
+
+        return $valid;
+    }
+
+    public function showUsage(): void
+    {
+        $required = [];
+        $optional = [];
+        $usage = $this->command;
+
+        foreach (self::RULES as $name => $rule) {
+            $prefix = $postfix = '';
+            if ($rule['required']) {
+                $required[$name] = $rule;
+            } else {
+                $optional[$name] = $rule;
+                $prefix = '[';
+                $postfix = ']';
+            }
+            $usage .= ' ' . $prefix . $this->formatUsage($name, $rule) . $postfix;
+        }
+
+        $this->log(self::DESCRIPTION);
+        $this->log(PHP_EOL . 'Usage: ' . trim($usage));
+
+        $this->log(PHP_EOL . 'Required Arguments:');
+        foreach ($required as $name => $info) {
+            $value = $this->formatUsage($name, $info);
+            $this->log("\t{$value}");
+            $this->log("\t\t{$info['info']}");
+        }
+
+        $this->log(PHP_EOL . 'Optional Arguments:');
+        foreach ($optional as $name => $info) {
+            $value = $this->formatUsage($name, $info);
+            $this->log("\t{$value}");
+            $this->log("\t\t{$info['info']}");
+        }
+    }
+
+    public function log(string $message): void
+    {
+        echo $message . PHP_EOL;
+    }
+
+    /** @param array{name: string, info: string, required: bool, flag?: bool} $rule */
+    private function formatUsage(string $name, array $rule): string
+    {
+        $example = $rule['required'] ? " {$name}" : "=\"{$name}\"";
+        $value = isset($rule['flag']) && $rule['flag'] ? '' : $example;
+
+        return '--' . $name . $value;
+    }
+}
+
+$cli = new Cli();
+
+try {
+    $cli->parse();
+} catch (Exception $e) {
+    $cli->log($e->getMessage());
+    exit(1);
+}
+
+if ($cli->hasOption('help')) {
+    $cli->showUsage();
+    exit(0);
+}
+
+if (!$cli->validate()) {
+    exit(1);
+}
+
+$notifier = new DefaultNotifier();
+
+$notification = (new Notification())
+    ->setTitle($cli->getStringOption('title'))
+    ->setBody($cli->getStringOption('body'));
+
+if ($cli->hasOption('icon')) {
+    $notification->setIcon($cli->getStringOption('icon'));
+}
+
+if ($cli->hasOption('subtitle')) {
+    $notification->addOption('subtitle', $cli->getStringOption('subtitle'));
+}
+
+if ($cli->hasOption('sound')) {
+    $notification->addOption('sound', $cli->getStringOption('sound'));
+}
+
+if ($cli->hasOption('url')) {
+    $notification->addOption('url', $cli->getStringOption('url'));
+}
+
+$result = $notifier->send($notification);
+$driver = $notifier->getDriver();
+
+if ($cli->hasOption('verbose')) {
+    if (!$driver) {
+        $cli->log('No driver available to display a notification on your system.');
+    } else {
+        $cli->log(sprintf('Notification %s with %s. ', $result ? 'successfully sent' : 'failed', str_replace('Joli\\JoliNotif\\Driver\\', '', $driver::class)));
+    }
+}
+
+exit($result ? 0 : 1);

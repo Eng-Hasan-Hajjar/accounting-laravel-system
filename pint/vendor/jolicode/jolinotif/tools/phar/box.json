@@ -1,0 +1,21 @@
+{
+  "base-path": "../../",
+  "directories": [
+      "bin",
+      "src",
+      "vendor"
+  ],
+  "files": [
+    "LICENSE",
+    "vendor/autoload.php"
+  ],
+  "compactors": [
+    "KevinGH\\Box\\Compactor\\Php"
+  ],
+  "annotations": false,
+  "compression": "GZ",
+  "check-requirements": false,
+  "git-version": "package_version",
+  "main": "jolinotif",
+  "output": "tools/phar/build/jolinotif.phar"
+}

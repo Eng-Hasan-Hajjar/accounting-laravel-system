@@ -1,0 +1,110 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+    schedule:
+        - cron: "0 0 * * MON"
+
+jobs:
+    check-cs:
+        name: Check Coding Standards
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: PHP-CS-Fixer
+              uses: docker://oskarstark/php-cs-fixer-ga
+              with:
+                  args: --config=.php-cs-fixer.php --diff --dry-run
+
+    phpstan:
+      name: Static Analysis
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: PHPStan
+          uses: docker://oskarstark/phpstan-ga
+          env:
+              REQUIRE_DEV: true
+
+    ci:
+        name: Test PHP ${{ matrix.php-version }} ${{ matrix.name }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                php-version: ["8.2", "8.3"]
+                composer-flags: [""]
+                name: [""]
+                include:
+                    - php-version: 8.1
+                      composer-flags: "--prefer-lowest"
+                      name: "(prefer lowest dependencies)"
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup PHP, with composer and extensions
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php-version }}
+                  extensions: mbstring, xml, ffi
+                  ini-values: phar.readonly="Off"
+
+            - name: Get composer cache directory
+              id: composer-cache
+              run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+
+            - name: Cache composer dependencies
+              uses: actions/cache@v3
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: ${{ runner.os }}-composer-${{ github.sha }}
+                  restore-keys: ${{ runner.os }}-composer-
+
+            - name: Install Composer dependencies
+              run: |
+                  composer update --prefer-dist --no-interaction ${{ matrix.composer-flags }}
+
+            - name: Install libnotify4 for LibNotifyDriver
+              run: |
+                sudo apt-get install -y --no-install-recommends --no-install-suggests libnotify4
+
+            - name: Run Tests
+              run: php vendor/bin/simple-phpunit
+
+    phar:
+        name: Create a PHAR and ensure it is working
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup PHP, with composer and extensions
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: ${{ matrix.php-version }}
+                  extensions: mbstring, xml, ffi
+                  ini-values: phar.readonly="Off"
+
+            - name: Install libnotify4 for LibNotifyDriver
+              run: |
+                sudo apt-get install -y --no-install-recommends --no-install-suggests libnotify4
+
+            - name: Build the PHAR
+              uses: ./.github/actions/phar
+
+            - name: Execute the PHAR
+              run: |
+                tools/phar/build/jolinotif.phar --help
+
+            - name: Trigger a notification
+              run: |
+                # This command will fail because libnotify will fail to send a notification to a real desktop environment
+                # But we still ensure that everything else in the PHAR works
+                tools/phar/build/jolinotif.phar --title "Yolo" --body "Hello world!" --verbose | grep "Notification failed with LibNotifyDriver"
